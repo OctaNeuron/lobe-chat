@@ -13,6 +13,8 @@ import { StateCreator } from 'zustand/vanilla';
 import { useClientDataSWR } from '@/libs/swr';
 import { aiProviderService } from '@/services/aiProvider';
 import { AiInfraStore } from '@/store/aiInfra/store';
+import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/selectors';
 import {
   AiProviderDetailItem,
   AiProviderListItem,
@@ -158,7 +160,10 @@ export const createAiProviderSlice: StateCreator<
     await get().refreshAiProviderRuntimeState();
   },
   refreshAiProviderRuntimeState: async () => {
-    await mutate([AiProviderSwrKey.fetchAiProviderRuntimeState, true]);
+    await Promise.all([
+      mutate([AiProviderSwrKey.fetchAiProviderRuntimeState, true]),
+      mutate([AiProviderSwrKey.fetchAiProviderRuntimeState, false]),
+    ]);
   },
   removeAiProvider: async (id) => {
     await aiProviderService.deleteAiProvider(id);
@@ -227,9 +232,12 @@ export const createAiProviderSlice: StateCreator<
       },
     ),
 
-  useFetchAiProviderRuntimeState: (isLogin) =>
-    useClientDataSWR<AiProviderRuntimeStateWithBuiltinModels | undefined>(
-      !isDeprecatedEdition ? [AiProviderSwrKey.fetchAiProviderRuntimeState, isLogin] : null,
+  useFetchAiProviderRuntimeState: (isLogin) => {
+    const isAuthLoaded = authSelectors.isLoaded(useUserStore.getState());
+    return useClientDataSWR<AiProviderRuntimeStateWithBuiltinModels | undefined>(
+      isAuthLoaded && !isDeprecatedEdition
+        ? [AiProviderSwrKey.fetchAiProviderRuntimeState, isLogin]
+        : null,
       async ([, isLogin]) => {
         const [{ LOBE_DEFAULT_MODEL_LIST: builtinAiModelList }, { DEFAULT_MODEL_PROVIDER_LIST }] =
           await Promise.all([import('model-bank'), import('@/config/modelProviders')]);
@@ -300,11 +308,13 @@ export const createAiProviderSlice: StateCreator<
               enabledAiProviders: data.enabledAiProviders,
               enabledChatModelList: data.enabledChatModelList || [],
               enabledImageModelList: data.enabledImageModelList || [],
+              isInitAiProviderRuntimeState: true,
             },
             false,
             'useFetchAiProviderRuntimeState',
           );
         },
       },
-    ),
+    );
+  },
 });
